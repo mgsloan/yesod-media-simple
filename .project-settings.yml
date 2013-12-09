@@ -4,6 +4,8 @@ module-template: ! 'module MODULE_NAME where
 extensions: {}
 environment: default
 cabal-file: project.cabal
+hidden-packages: ''
 version: 1
+extra-packages: ''
 ghc-args: []
 excluded-modules: []
