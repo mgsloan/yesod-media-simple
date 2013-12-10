@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 module Yesod.Media
     ( RenderContent(..)
@@ -70,14 +71,17 @@ instance (MonadHandler m, MonadIO m)
 renderPng :: (MonadHandler m, PngSavable a) => Image a -> m TypedContent
 renderPng = return . TypedContent typePng . toContent . encodePng
 
-instance MonadHandler m => RenderContent m (Image PixelRGBA16) where renderContent = renderPng
 instance MonadHandler m => RenderContent m (Image PixelRGBA8)  where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image PixelRGB16)  where renderContent = renderPng
 instance MonadHandler m => RenderContent m (Image PixelRGB8)   where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image PixelYA16)   where renderContent = renderPng
 instance MonadHandler m => RenderContent m (Image PixelYA8)    where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image Pixel16)     where renderContent = renderPng
 instance MonadHandler m => RenderContent m (Image Pixel8)      where renderContent = renderPng
+
+#if MIN_VERSION_JuicyPixels(3,0,0)
+instance MonadHandler m => RenderContent m (Image PixelRGBA16) where renderContent = renderPng
+instance MonadHandler m => RenderContent m (Image PixelRGB16)  where renderContent = renderPng
+instance MonadHandler m => RenderContent m (Image PixelYA16)   where renderContent = renderPng
+instance MonadHandler m => RenderContent m (Image Pixel16)     where renderContent = renderPng
+#endif
 
 -- | This type wraps RGB8 image data stored in nested lists, so that you don't
 --   need to use "Codec.Picture".  The inner list is one row of the image, and
