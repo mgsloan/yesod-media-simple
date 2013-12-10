@@ -1,14 +1,16 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
 
 module Yesod.Media
-    ( RenderContent(..)
-    , serve
+    ( serve
+    , serveHandler
+    , RenderContent(..)
     -- * Diagrams
     -- $diagrams
     , serveDiagram
@@ -31,18 +33,16 @@ import Yesod
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Vector.Storable as V
 
-serve :: RenderContent LiteHandler a => a -> IO ()
+serve :: RenderContent a => a -> IO ()
 serve = warpEnv . liteApp . onMethod "GET" . dispatchTo . renderContent
 
-class MonadHandler m => RenderContent m a where
-    renderContent :: a -> m TypedContent
+serveHandler :: RenderContent a => LiteHandler a -> IO ()
+serveHandler = warpEnv . liteApp . onMethod "GET" . dispatchTo . (renderContent =<<)
 
-instance RenderContent (HandlerT site m) a
-    => RenderContent (HandlerT site m) (HandlerT site m a) where
-    renderContent f = f >>= renderContent
+class RenderContent a where
+    renderContent :: a -> HandlerT site IO TypedContent
 
-instance (MonadIO m, RenderContent (HandlerT site m) a)
-    => RenderContent (HandlerT site m) (IO a) where
+instance RenderContent a => RenderContent (IO a) where
     renderContent f = liftIO f >>= renderContent
 
 -- $diagrams
@@ -51,12 +51,10 @@ instance (MonadIO m, RenderContent (HandlerT site m) a)
 serveDiagram :: Diagram Cairo R2 -> IO ()
 serveDiagram = serve
 
-instance (MonadHandler m, MonadIO m)
-    => RenderContent m (Diagram Cairo R2) where
+instance RenderContent (Diagram Cairo R2) where
     renderContent = renderContent . (Width 640, )
 
-instance (MonadHandler m, MonadIO m)
-    => RenderContent m (SizeSpec2D, Diagram Cairo R2) where
+instance RenderContent (SizeSpec2D, Diagram Cairo R2) where
     renderContent (sz, img) = do
         let path = "out.png"
         png <- liftIO $ do
@@ -71,16 +69,16 @@ instance (MonadHandler m, MonadIO m)
 renderPng :: (MonadHandler m, PngSavable a) => Image a -> m TypedContent
 renderPng = return . TypedContent typePng . toContent . encodePng
 
-instance MonadHandler m => RenderContent m (Image PixelRGBA8)  where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image PixelRGB8)   where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image PixelYA8)    where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image Pixel8)      where renderContent = renderPng
+instance RenderContent (Image PixelRGBA8)  where renderContent = renderPng
+instance RenderContent (Image PixelRGB8)   where renderContent = renderPng
+instance RenderContent (Image PixelYA8)    where renderContent = renderPng
+instance RenderContent (Image Pixel8)      where renderContent = renderPng
 
 #if MIN_VERSION_JuicyPixels(3,0,0)
-instance MonadHandler m => RenderContent m (Image PixelRGBA16) where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image PixelRGB16)  where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image PixelYA16)   where renderContent = renderPng
-instance MonadHandler m => RenderContent m (Image Pixel16)     where renderContent = renderPng
+instance RenderContent (Image PixelRGBA16) where renderContent = renderPng
+instance RenderContent (Image PixelRGB16)  where renderContent = renderPng
+instance RenderContent (Image PixelYA16)   where renderContent = renderPng
+instance RenderContent (Image Pixel16)     where renderContent = renderPng
 #endif
 
 -- | This type wraps RGB8 image data stored in nested lists, so that you don't
@@ -97,13 +95,13 @@ pixelListToImage (PixelList w h pixels) =
         | row <- take h $ pixels ++ repeat (repeat (0,0,0))
         ]
 
-instance MonadHandler m => RenderContent m PixelList where
+instance RenderContent PixelList where
     renderContent = renderContent . pixelListToImage
 
 -- | This type wraps image data that is appropriate for JPEG export, along with
 --   the requested quality (from 0 to 100).
 data Jpeg = Jpeg Word8 (Image PixelYCbCr8)
 
-instance MonadHandler m => RenderContent m Jpeg where
+instance RenderContent Jpeg where
     renderContent (Jpeg q x) =
         return $ TypedContent typeJpeg $ toContent $ encodeJpegAtQuality q x
