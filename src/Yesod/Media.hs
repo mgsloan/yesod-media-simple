@@ -1,3 +1,4 @@
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -12,17 +13,22 @@ module Yesod.Media
     , serveDiagram
     -- * Images
     -- $images
-    , serveRGB8
+    , PixelList(..)
+    , Jpeg(..)
     ) where
 
 import Codec.Picture
-import Data.ByteString
+import Codec.Picture.Types
+import Control.Monad
+import Control.Monad.Primitive (PrimMonad)
 import Data.Word
 import Diagrams.Prelude (Diagram, R2)
 import Diagrams.TwoD (SizeSpec2D(..))
 import Diagrams.Backend.Cairo
 import Yesod
+
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Vector.Storable as V
 
 serve :: RenderContent LiteHandler a => a -> IO ()
 serve = warpEnv . liteApp . onMethod "GET" . dispatchTo . renderContent
@@ -33,6 +39,10 @@ class MonadHandler m => RenderContent m a where
 instance RenderContent (HandlerT site m) a
     => RenderContent (HandlerT site m) (HandlerT site m a) where
     renderContent f = f >>= renderContent
+
+instance (MonadIO m, RenderContent (HandlerT site m) a)
+    => RenderContent (HandlerT site m) (IO a) where
+    renderContent f = liftIO f >>= renderContent
 
 -- $diagrams
 -- Cairo is used to render diagrams to pngs.
@@ -57,11 +67,6 @@ instance (MonadHandler m, MonadIO m)
 -- The various types of 'Image' from JuicyPixels ("Codec.Picture") are servable
 -- as pngs, unless the 'Jpeg' wrapper type is used.
 
--- | Convenience function that's just equal to 'serve', but constrains the input
---   type to be a standard 8-bit RGB image.
-serveRGB8 :: Image PixelRGB8 -> IO ()
-serveRGB8 = serve
-
 renderPng :: (MonadHandler m, PngSavable a) => Image a -> m TypedContent
 renderPng = return . TypedContent typePng . toContent . encodePng
 
@@ -73,6 +78,23 @@ instance MonadHandler m => RenderContent m (Image PixelYA16)   where renderConte
 instance MonadHandler m => RenderContent m (Image PixelYA8)    where renderContent = renderPng
 instance MonadHandler m => RenderContent m (Image Pixel16)     where renderContent = renderPng
 instance MonadHandler m => RenderContent m (Image Pixel8)      where renderContent = renderPng
+
+-- | This type wraps RGB8 image data stored in nested lists, so that you don't
+--   need to use "Codec.Picture".  The inner list is one row of the image, and
+--   the tuple elements are the red / green / blue values, respectively.
+data PixelList = PixelList Int Int [[(Word8, Word8, Word8)]]
+
+pixelListToImage :: PixelList -> Image PixelRGB8
+pixelListToImage (PixelList w h pixels) =
+    Image w h $ V.fromList $ concat $ concat
+        [ [ [r, g, b]
+          | (r, g, b) <- take w $ row ++ repeat (0,0,0)
+          ]
+        | row <- take h $ pixels ++ repeat (repeat (0,0,0))
+        ]
+
+instance MonadHandler m => RenderContent m PixelList where
+    renderContent = renderContent . pixelListToImage
 
 -- | This type wraps image data that is appropriate for JPEG export, along with
 --   the requested quality (from 0 to 100).
