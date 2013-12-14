@@ -26,7 +26,7 @@ import Codec.Picture
 import Codec.Picture.Types
 import Data.Word
 import Diagrams.Core
-import qualified Diagrams.TwoD as TwoD
+import qualified Diagrams.TwoD.Image as Dia
 import Diagrams.Prelude (Diagram, R2)
 import Diagrams.TwoD (SizeSpec2D(..))
 import Diagrams.TwoD.Image (image)
@@ -119,7 +119,7 @@ instance RenderContent Jpeg where
         return $ TypedContent typeJpeg $ toContent $ encodeJpegAtQuality q x
 
 -- | Convert
-imageToDiagram :: (PngSavable a, Renderable TwoD.Image b) => Image a -> IO (Diagram b R2)
+imageToDiagram :: (PngSavable a, Renderable Dia.Image b) => Image a -> IO (Diagram b R2)
 imageToDiagram img = do
     path <- getTempPath "out.png"
     writePng path img

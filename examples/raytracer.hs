@@ -5,14 +5,13 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Main where
 
-import Codec.Picture
+import qualified Codec.Picture as Juicy
 import Control.Newtype (pack, unpack)
 import Control.Lens ((^.), unwrapping)
 import Data.Default
 import Data.Monoid.Inf (Inf(..), PosInf)
-import Diagrams.Prelude hiding (Image)
-import Diagrams.TwoD hiding (Image)
-import Diagrams.ThreeD.Transform
+import Diagrams.Prelude
+import Diagrams.TwoD
 import Diagrams.ThreeD.Types
 import Diagrams.Backend.Cairo
 import Yesod.Media
@@ -38,7 +37,7 @@ main = serve $ debugTrace ray scene # lw 0.025
 
 data TraceResults = TraceResults
     { traceSegs :: [(ArrowHT, Ray R3)] -- ^ Drawn in the debugging results.
-    , traceOutput :: Image PixelRGB8
+    , traceOutput :: Juicy.Image Juicy.PixelRGB8
     }
 
 --TODO: use the ray's vector as a camera angle
@@ -50,12 +49,12 @@ runTrace cameraRay Shape{..} =
     , traceOutput = img
     }
   where
-    (rays, img) = generateFoldImage go [] 10 10
+    (rays, img) = Juicy.generateFoldImage go [] 10 10
     go debugRays ox oy =
         ( case s of
             Finite x -> (noHead, Ray (rayOrigin ray) (x *^ rayVector ray)) : debugRays
             Infinity -> (dart, Ray (rayOrigin ray) (5 *^ rayVector ray)) : debugRays
-        , PixelRGB8 val val val
+        , Juicy.PixelRGB8 val val val
         )
       where
         val = case s of
