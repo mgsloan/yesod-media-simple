@@ -9,10 +9,13 @@ import qualified Codec.Picture as Juicy
 import Control.Newtype (pack, unpack)
 import Control.Lens ((^.), unwrapping)
 import Data.Default
+import Data.List
 import Data.Monoid.Inf (Inf(..), PosInf)
+import Data.Ord
 import Diagrams.Prelude
 import Diagrams.TwoD
 import Diagrams.ThreeD.Types
+import qualified Diagrams.ThreeD as ThreeD
 import Diagrams.Backend.Cairo
 import Yesod.Media
 
@@ -20,10 +23,13 @@ import Yesod.Media
 -- * Add a primitive to diagrams that encompasses the entire plane.
 
 main :: IO ()
-main = serve $ debugTrace ray scene # lw 0.025
+main = serve $ debugTrace ray scene
   where
-    ray = Ray (p3 (0.3, 3, 3)) (r3 (0, -1.25, -1))
-    scene = steinmetz
+    ray = case 1 of
+        0 -> Ray (p3 (3, 3, 3)) (r3 (-1, -1, -1))
+        1 -> Ray (p3 (0, 4, 4)) (r3 (0, -1, -1))
+        _ -> Ray (p3 (0, 0, 5)) (r3 (0, 0, -1))
+    scene = cube
 
 -- The algorithm will look something like:
 --
@@ -42,48 +48,63 @@ data TraceResults = TraceResults
 
 --TODO: use the ray's vector as a camera angle
 
-runTrace :: Ray R3 -> Shape b -> TraceResults
-runTrace cameraRay Shape{..} =
+runTrace :: Int -> Int -> Ray R3 -> Shape b -> TraceResults
+runTrace w h (normalizedRay -> cameraRay) Shape{..} =
     TraceResults
     { traceSegs = rays
     , traceOutput = img
     }
   where
-    (rays, img) = Juicy.generateFoldImage go [] 10 10
-    go debugRays ox oy =
+    (rays, img) = Juicy.generateFoldImage go [] w h
+    go debugRays cx cy =
         ( case s of
-            Finite x -> (noHead, Ray (rayOrigin ray) (x *^ rayVector ray)) : debugRays
+            Finite x | cx `mod` 5 == 0 && cy `mod` 5 == 0 ->
+                (noHead, Ray (rayOrigin ray) (x *^ rayVector ray)) : debugRays
             Infinity -> (dart, Ray (rayOrigin ray) (5 *^ rayVector ray)) : debugRays
-        , Juicy.PixelRGB8 val val val
+            _ -> debugRays
+        , case which of
+            0 -> Juicy.PixelRGB8 val 0 0
+            1 -> Juicy.PixelRGB8 0 val 0
+            _ -> Juicy.PixelRGB8 0 0 val
         )
       where
         val = case s of
-            Finite x -> round x
+            Finite x -> round (x * 40)
             Infinity -> 0
         --TODO: turn null vector ray tests into inclusion tests
-        s = maximum $ map (\(f, x) -> traceRay (transformRay f ray) x)
+        (which, s) = maximumBy (comparing snd) $
+            zipWith (\i (f, x) -> (i, traceRay (transformRay f ray) x)) [0..]
             [ (xvec, side)
             , (yvec, top)
             , (zvec, front)
             ]
-        --TODO: non orthographic camera.
+        --TODO: Just use rays a plane instead of rotations.
         ray = Ray
-            { rayOrigin = rayOrigin cameraRay .+^ r3 (fromIntegral ox / 4 - 1, fromIntegral oy / 4 - 4, 0)
-            , rayVector = r3 (0.1, 0.1, -1)
+            { rayOrigin = rayOrigin cameraRay
+            , rayVector =
+                apply (ThreeD.rotationAbout origin updir yaw) $
+                apply (ThreeD.rotationAbout origin rightdir pitch) (rayVector cameraRay)
             }
+        coef = 1
+        yaw = Turn (fromIntegral (cx - w `div` 2) / fromIntegral w * coef)
+        pitch = Turn (fromIntegral (cy - h `div` 2) / fromIntegral h * coef)
+        Spherical (Turn about) (Turn toward) = ThreeD.direction $ rayVector cameraRay
+        updir = Spherical (Turn about) (Turn (toward + 1/4))
+        rightdir = Spherical (Turn (about + 1/4)) (Turn (toward + 1/4))
 
-debugTrace :: Ray R3 -> Shape Cairo -> Diagram Cairo R2
-debugTrace (normalizedRay -> ray) shape@Shape{..} =
-    (ortho yvec top ||| viewport results)
-    ===
-    (ortho zvec front ||| ortho xvec side)
+debugTrace :: Ray R3 -> Shape Cairo -> IO (Diagram Cairo R2)
+debugTrace ray shape@Shape{..} = do
+    results <- imageToDiagram output
+    return $ lw 0.025 $
+        (ortho yvec top ||| viewport results)
+        ===
+        (ortho zvec front ||| ortho xvec side)
   where
     ortho f contents =
         viewport $
             mconcat (map (\(h, r) -> drawRay h (transformRay f r)) rays) <>
             contents # lw 0.1
-    TraceResults rays output = runTrace ray shape
-    results = mempty
+    TraceResults rays output = runTrace 300 300 ray shape
 
 viewport :: Diagram Cairo R2 -> Diagram Cairo R2
 viewport contents =

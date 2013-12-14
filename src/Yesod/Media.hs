@@ -118,13 +118,14 @@ instance RenderContent Jpeg where
     renderContent (Jpeg q x) =
         return $ TypedContent typeJpeg $ toContent $ encodeJpegAtQuality q x
 
--- | Convert
+-- | Convert a JuicyPixels 'Image' to a 'Diagram'.
 imageToDiagram :: (PngSavable a, Renderable Dia.Image b) => Image a -> IO (Diagram b R2)
 imageToDiagram img = do
     path <- getTempPath "out.png"
     writePng path img
     return $ image path (fromIntegral $ imageWidth img) (fromIntegral $ imageHeight img)
 
+-- | Convert a 'Diagram' to a JuicyPixels 'Image'.
 diagramToImage :: Diagram Cairo R2 -> Double -> Double -> IO (Either String DynamicImage)
 diagramToImage dia w h = do
     path <- getTempPath "out.png"
