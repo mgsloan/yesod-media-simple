@@ -2,12 +2,13 @@ module-template: ! 'module MODULE_NAME where
 
 '
 extensions: {}
-environment: ghc-7.4.2-stable-13.09
+environment: default
 cabal-file: project.cabal
 hidden-packages: ''
 version: 1
 extra-packages: ! 'JuicyPixels-2.0.2
 
 '
-ghc-args: []
+ghc-args:
+- -Wall
 excluded-modules: []

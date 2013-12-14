@@ -18,16 +18,20 @@ module Yesod.Media
     -- $images
     , PixelList(..)
     , Jpeg(..)
+    , imageToDiagram
+    , diagramToImage
     ) where
 
 import Codec.Picture
 import Codec.Picture.Types
-import Control.Monad
-import Control.Monad.Primitive (PrimMonad)
 import Data.Word
+import Diagrams.Core
+import qualified Diagrams.TwoD as TwoD
 import Diagrams.Prelude (Diagram, R2)
 import Diagrams.TwoD (SizeSpec2D(..))
+import Diagrams.TwoD.Image (image)
 import Diagrams.Backend.Cairo
+import System.IO (openTempFile, hClose)
 import Yesod
 
 import qualified Data.ByteString.Lazy as LBS
@@ -45,6 +49,7 @@ class RenderContent a where
 instance RenderContent a => RenderContent (IO a) where
     renderContent f = liftIO f >>= renderContent
 
+--------------------------------------------------------------------------------
 -- $diagrams
 -- Cairo is used to render diagrams to pngs.
 
@@ -55,13 +60,20 @@ instance RenderContent (Diagram Cairo R2) where
     renderContent = renderContent . (Width 640, )
 
 instance RenderContent (SizeSpec2D, Diagram Cairo R2) where
-    renderContent (sz, img) = do
-        let path = "out.png"
+    renderContent (sz, dia) = do
         png <- liftIO $ do
-            renderCairo path sz img
+            path <- getTempPath "out.png"
+            renderCairo path sz dia
             LBS.readFile path
         return $ TypedContent typePng (toContent png)
 
+getTempPath :: FilePath -> IO FilePath
+getTempPath base = do
+    (path, handle) <- openTempFile "." base
+    hClose handle
+    return path
+
+--------------------------------------------------------------------------------
 -- $images
 -- The various types of 'Image' from JuicyPixels ("Codec.Picture") are servable
 -- as pngs, unless the 'Jpeg' wrapper type is used.
@@ -105,3 +117,16 @@ data Jpeg = Jpeg Word8 (Image PixelYCbCr8)
 instance RenderContent Jpeg where
     renderContent (Jpeg q x) =
         return $ TypedContent typeJpeg $ toContent $ encodeJpegAtQuality q x
+
+-- | Convert
+imageToDiagram :: (PngSavable a, Renderable TwoD.Image b) => Image a -> IO (Diagram b R2)
+imageToDiagram img = do
+    path <- getTempPath "out.png"
+    writePng path img
+    return $ image path (fromIntegral $ imageWidth img) (fromIntegral $ imageHeight img)
+
+diagramToImage :: Diagram Cairo R2 -> Double -> Double -> IO (Either String DynamicImage)
+diagramToImage dia w h = do
+    path <- getTempPath "out.png"
+    renderCairo path (Dims w h) dia
+    readPng path
