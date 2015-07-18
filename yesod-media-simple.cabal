@@ -1,5 +1,5 @@
 name:                yesod-media-simple
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Simple display of media types, served by yesod
 homepage:            https://github.com/mgsloan/yesod-media-simple
 license:             MIT
