@@ -10,6 +10,9 @@ copyright:           2014 Michael Sloan
 category:            Graphics
 build-type:          Simple
 extra-source-files:  README.md
+                     Setup.hs
+                     examples/plasma.hs
+                     examples/sierpinski.hs
 cabal-version:       >=1.8
 
 library
