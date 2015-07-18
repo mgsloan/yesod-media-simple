@@ -19,30 +19,33 @@ module Yesod.Media.Simple
     -- $images
     , PixelList(..)
     , Jpeg(..)
-    , imageToDiagram
+    , imageToDiagramEmb
+    , imageToDiagramExt
     , diagramToImage
     ) where
 
-import Codec.Picture
-import Codec.Picture.Types
-import Data.Word
-import Diagrams.Core
-import qualified Diagrams.TwoD.Image as Dia
-import Diagrams.Prelude (Diagram, R2)
-import Diagrams.TwoD (SizeSpec2D(..))
-import Diagrams.TwoD.Image (image)
-import Diagrams.Backend.Cairo
-import System.IO (openTempFile, hClose)
-import Yesod
-
+import           Codec.Picture
+import           Codec.Picture.Types
+import           Control.Exception (finally)
 import qualified Data.ByteString.Lazy as LBS
+import           Data.Monoid (mempty)
 import qualified Data.Vector.Storable as V
+import           Data.Word
+import           Diagrams.Backend.Cairo
+import           Diagrams.Core
+import           Diagrams.Prelude (Diagram, R2)
+import           Diagrams.TwoD (SizeSpec2D(..))
+import qualified Diagrams.TwoD.Image as Dia
+import           System.Directory (getTemporaryDirectory)
+import           System.Environment (lookupEnv, setEnv, unsetEnv)
+import           System.IO (openTempFile, hClose)
+import           Yesod
 
 serve :: RenderContent a => a -> IO ()
-serve = warpEnv . liteApp . onMethod "GET" . dispatchTo . renderContent
+serve = useDefaultPort . warpEnv . liteApp . onMethod "GET" . dispatchTo . renderContent
 
 serveHandler :: RenderContent a => LiteHandler a -> IO ()
-serveHandler = warpEnv . liteApp . onMethod "GET" . dispatchTo . (renderContent =<<)
+serveHandler = useDefaultPort . warpEnv . liteApp . onMethod "GET" . dispatchTo . (renderContent =<<)
 
 class RenderContent a where
     renderContent :: a -> HandlerT site IO TypedContent
@@ -67,12 +70,6 @@ instance RenderContent (SizeSpec2D, Diagram Cairo R2) where
             renderCairo path sz dia
             LBS.readFile path
         return $ TypedContent typePng (toContent png)
-
-getTempPath :: FilePath -> IO FilePath
-getTempPath base = do
-    (path, handle) <- openTempFile "." base
-    hClose handle
-    return path
 
 --------------------------------------------------------------------------------
 -- $images
@@ -119,12 +116,40 @@ instance RenderContent Jpeg where
     renderContent (Jpeg q x) =
         return $ TypedContent typeJpeg $ toContent $ encodeJpegAtQuality q x
 
--- | Convert a JuicyPixels 'Image' to a 'Diagram'.
-imageToDiagram :: (PngSavable a, Renderable Dia.Image b) => Image a -> IO (Diagram b R2)
-imageToDiagram img = do
-    path <- getTempPath "out.png"
-    writePng path img
-    return $ image path (fromIntegral $ imageWidth img) (fromIntegral $ imageHeight img)
+-- | Convert a JuicyPixels 'Image' to an image embedded in the
+-- 'Diagram'. Note that this image is *NOT* renderable by the Cairo
+-- backend, which is used by other functions in this module.
+imageToDiagramEmb :: (Renderable (Dia.DImage Dia.Embedded) b) => DynamicImage -> Diagram b R2
+imageToDiagramEmb img =
+    imageFromDynamicImage img $ \img' ->
+        let w = fromIntegral (imageWidth img')
+            h = fromIntegral (imageHeight img')
+         in Dia.image (Dia.DImage (Dia.ImageRaster img) w h mempty)
+
+-- | Write a JuicyPixels 'Image' to a temporary file
+imageToDiagramExt :: (Renderable (Dia.DImage Dia.External) b) => DynamicImage -> IO (Diagram b R2)
+imageToDiagramExt img =
+    imageFromDynamicImage img $ \img' -> do
+        path <- getTempPath "out.png"
+        either fail (\_ -> return ()) =<< writeDynamicPng path img
+        let w = fromIntegral (imageWidth img')
+            h = fromIntegral (imageHeight img')
+        return (Dia.image (Dia.DImage (Dia.ImageRef path) w h mempty))
+
+imageFromDynamicImage :: DynamicImage -> (forall a. Image a -> b) -> b
+imageFromDynamicImage (ImageY8     img) f = f img
+imageFromDynamicImage (ImageY16    img) f = f img
+imageFromDynamicImage (ImageYF     img) f = f img
+imageFromDynamicImage (ImageYA8    img) f = f img
+imageFromDynamicImage (ImageYA16   img) f = f img
+imageFromDynamicImage (ImageRGB8   img) f = f img
+imageFromDynamicImage (ImageRGB16  img) f = f img
+imageFromDynamicImage (ImageRGBF   img) f = f img
+imageFromDynamicImage (ImageRGBA8  img) f = f img
+imageFromDynamicImage (ImageRGBA16 img) f = f img
+imageFromDynamicImage (ImageYCbCr8 img) f = f img
+imageFromDynamicImage (ImageCMYK8  img) f = f img
+imageFromDynamicImage (ImageCMYK16 img) f = f img
 
 -- | Convert a 'Diagram' to a JuicyPixels 'Image'.
 diagramToImage :: Diagram Cairo R2 -> Double -> Double -> IO (Either String DynamicImage)
@@ -132,3 +157,23 @@ diagramToImage dia w h = do
     path <- getTempPath "out.png"
     renderCairo path (Dims w h) dia
     readPng path
+
+-- | Set PORT environment variable to 3000 if it's unset.  Tells
+-- stdout which port it's listening to.
+useDefaultPort :: IO () -> IO ()
+useDefaultPort inner = do
+    mport <- lookupEnv "PORT"
+    case mport of
+        Just port -> do
+            putStrLn $ "Running server on localhost:" ++ port
+            inner
+        Nothing -> do
+            setEnv "PORT" "3000"
+            inner `finally` unsetEnv "PORT"
+
+getTempPath :: FilePath -> IO FilePath
+getTempPath base = do
+    tempDir <- getTemporaryDirectory
+    (path, handle) <- openTempFile tempDir base
+    hClose handle
+    return path
