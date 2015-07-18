@@ -14,7 +14,7 @@ cabal-version:       >=1.8
 
 library
   exposed-modules:     Yesod.Media.Simple
-  build-depends:       base > 4,
+  build-depends:       base >= 4 && < 5,
                        bytestring,
                        diagrams-cairo,
                        diagrams-core,
