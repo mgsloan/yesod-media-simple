@@ -9,6 +9,7 @@ maintainer:          mgsloan@gmail.com
 copyright:           2014 Michael Sloan
 category:            Graphics
 build-type:          Simple
+extra-source-files:  README.md
 cabal-version:       >=1.8
 
 library
