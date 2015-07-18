@@ -1,0 +1,17 @@
+TAGS
+*.tags
+dist
+dist_*
+.shelly
+*.o
+*.hi
+*.chi
+*.chs.h
+*.hi-boot
+*.o-boot
+*.keter
+.lvimrc
+*.swp
+.docker-home
+.stack-work
+client_session_key.aes
