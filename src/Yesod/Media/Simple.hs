@@ -25,7 +25,6 @@ module Yesod.Media.Simple
     ) where
 
 import           Codec.Picture
-import           Codec.Picture.Types
 import           Control.Exception (finally)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Monoid (mempty)
@@ -33,7 +32,7 @@ import qualified Data.Vector.Storable as V
 import           Data.Word
 import           Diagrams.Backend.Cairo
 import           Diagrams.Core
-import           Diagrams.Prelude (Diagram, R2)
+import           Diagrams.Prelude (R2)
 import           Diagrams.TwoD (SizeSpec2D(..))
 import qualified Diagrams.TwoD.Image as Dia
 import           System.Directory (getTemporaryDirectory)
