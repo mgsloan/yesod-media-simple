@@ -80,10 +80,14 @@ serveDiagram :: Diagram Cairo R2 -> IO ()
 serveDiagram = serve
 
 instance RenderContent (Diagram Cairo R2) where
-    renderContent = renderContent . (Width 640, )
+    renderContent = renderContent . SizedDiagram (Width 640)
 
-instance RenderContent (SizeSpec2D, Diagram Cairo R2) where
-    renderContent (sz, dia) = do
+-- | 'SizedDiagram' can be used to specify the output size of the
+-- diagram when rendering it with Cairo.
+data SizedDiagram = SizedDiagram SizeSpec2D (Diagram Cairo R2)
+
+instance RenderContent SizedDiagram where
+    renderContent (SizedDiagram sz dia) = do
         png <- liftIO $ do
             path <- getTempPath "out.png"
             renderCairo path sz dia
