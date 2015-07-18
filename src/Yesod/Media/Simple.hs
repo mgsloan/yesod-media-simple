@@ -8,6 +8,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
 
+-- | Easily serve different media types to the user.
 module Yesod.Media.Simple
     ( serve
     , serveHandler
@@ -15,10 +16,12 @@ module Yesod.Media.Simple
     -- * Diagrams
     -- $diagrams
     , serveDiagram
+    , SizedDiagram(..)
     -- * Images
     -- $images
     , PixelList(..)
     , Jpeg(..)
+    -- * Utilities
     , imageToDiagramEmb
     , imageToDiagramExt
     , diagramToImage
@@ -40,13 +43,27 @@ import           System.Environment (lookupEnv, setEnv, unsetEnv)
 import           System.IO (openTempFile, hClose)
 import           Yesod
 
+-- | Starts a web server which serves the given data to the client.  It
+-- listens on the port specified by the @PORT@ environment variable.
+-- If there is no @PORT@ variable, it defaults to port @3000@.  This
+-- means that the results will be visible at <http://localhost:3000>.
+-- The server responds to any @GET@ request with the results - the
+-- route is ignored.
 serve :: RenderContent a => a -> IO ()
 serve = useDefaultPort . warpEnv . liteApp . onMethod "GET" . dispatchTo . renderContent
 
+-- | Like 'serve', but the media to render results from a 'LiteHandler'
+-- action. This allows the data to render to be computed within the
+-- LiteHandler monad, allowing it to respond particularly to the
+-- user's request.
 serveHandler :: RenderContent a => LiteHandler a -> IO ()
 serveHandler = useDefaultPort . warpEnv . liteApp . onMethod "GET" . dispatchTo . (renderContent =<<)
 
+-- | This class defines how to serve different media types to the
+-- user.
 class RenderContent a where
+    -- | Given some data, computes the 'TypedContent' which should be
+    -- sent to the client in order to view it.
     renderContent :: a -> HandlerT site IO TypedContent
 
 instance RenderContent a => RenderContent (IO a) where
@@ -56,6 +73,9 @@ instance RenderContent a => RenderContent (IO a) where
 -- $diagrams
 -- Cairo is used to render diagrams to pngs.
 
+-- | A type-specialized version of 'serve'.  This is usually preferred
+-- to 'serve' because Diagrams tend to be polymorphic - this fixes the
+-- input data to be a @Diagram Cairo R2@.
 serveDiagram :: Diagram Cairo R2 -> IO ()
 serveDiagram = serve
 
@@ -125,7 +145,10 @@ imageToDiagramEmb img =
             h = fromIntegral (imageHeight img')
          in Dia.image (Dia.DImage (Dia.ImageRaster img) w h mempty)
 
--- | Write a JuicyPixels 'Image' to a temporary file
+-- | Write a JuicyPixels 'Image' to a file in the system temp
+-- directory, and create a diagram which references this 'Image' file.
+-- Unlike imageToDiagramEmb, this Diagram can be rendered by the Cairo
+-- backend.
 imageToDiagramExt :: (Renderable (Dia.DImage Dia.External) b) => DynamicImage -> IO (Diagram b R2)
 imageToDiagramExt img =
     imageFromDynamicImage img $ \img' -> do
@@ -135,6 +158,8 @@ imageToDiagramExt img =
             h = fromIntegral (imageHeight img')
         return (Dia.image (Dia.DImage (Dia.ImageRef path) w h mempty))
 
+-- TODO: it seems odd that something like this doesn't exist in
+-- JuicyPixels.
 imageFromDynamicImage :: DynamicImage -> (forall a. Image a -> b) -> b
 imageFromDynamicImage (ImageY8     img) f = f img
 imageFromDynamicImage (ImageY16    img) f = f img
@@ -170,6 +195,7 @@ useDefaultPort inner = do
             setEnv "PORT" "3000"
             inner `finally` unsetEnv "PORT"
 
+-- | Get a file in the system temporary directory.
 getTempPath :: FilePath -> IO FilePath
 getTempPath base = do
     tempDir <- getTemporaryDirectory
