@@ -1,6 +1,6 @@
 import Diagrams.Prelude
-import Diagrams.Backend.Cairo
-import Yesod.Media
+import Diagrams.Backend.Cairo (Cairo)
+import Yesod.Media.Simple
 
 -- | The main entry point.
 main :: IO ()

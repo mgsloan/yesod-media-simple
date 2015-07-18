@@ -6,8 +6,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RankNTypes #-}
 
-module Yesod.Media
+module Yesod.Media.Simple
     ( serve
     , serveHandler
     , RenderContent(..)

@@ -3,7 +3,7 @@ import Codec.Picture
 import Data.Time
 import Data.Word
 import Yesod
-import Yesod.Media
+import Yesod.Media.Simple
 
 main = serve $ do
     now <- getCurrentTime
