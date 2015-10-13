@@ -1,12 +1,13 @@
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE ParallelListComp #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Easily serve different media types to the user.
 module Yesod.Media.Simple
@@ -30,14 +31,15 @@ module Yesod.Media.Simple
 import           Codec.Picture
 import           Control.Exception (finally)
 import qualified Data.ByteString.Lazy as LBS
-import           Data.Monoid (mempty)
+import           Data.Monoid (Any)
 import qualified Data.Vector.Storable as V
 import           Data.Word
 import           Diagrams.Backend.Cairo
 import           Diagrams.Core
-import           Diagrams.Prelude (R2)
-import           Diagrams.TwoD (SizeSpec2D(..))
+import           Diagrams.Prelude (V2)
+import           Diagrams.Size (SizeSpec)
 import qualified Diagrams.TwoD.Image as Dia
+import           Diagrams.TwoD.Size
 import           System.Directory (getTemporaryDirectory)
 import           System.Environment (lookupEnv, setEnv, unsetEnv)
 import           System.IO (openTempFile, hClose)
@@ -75,16 +77,16 @@ instance RenderContent a => RenderContent (IO a) where
 
 -- | A type-specialized version of 'serve'.  This is usually preferred
 -- to 'serve' because Diagrams tend to be polymorphic - this fixes the
--- input data to be a @Diagram Cairo R2@.
-serveDiagram :: Diagram Cairo R2 -> IO ()
+-- input data to be a @Diagram Cairo@.
+serveDiagram :: Diagram Cairo -> IO ()
 serveDiagram = serve
 
-instance RenderContent (Diagram Cairo R2) where
-    renderContent = renderContent . SizedDiagram (Width 640)
+instance RenderContent (QDiagram Cairo V2 Double Any) where
+    renderContent = renderContent . SizedDiagram (mkWidth 640)
 
 -- | 'SizedDiagram' can be used to specify the output size of the
 -- diagram when rendering it with Cairo.
-data SizedDiagram = SizedDiagram SizeSpec2D (Diagram Cairo R2)
+data SizedDiagram = SizedDiagram (SizeSpec V2 Double) (Diagram Cairo)
 
 instance RenderContent SizedDiagram where
     renderContent (SizedDiagram sz dia) = do
@@ -142,7 +144,7 @@ instance RenderContent Jpeg where
 -- | Convert a JuicyPixels 'Image' to an image embedded in the
 -- 'Diagram'. Note that this image is *NOT* renderable by the Cairo
 -- backend, which is used by other functions in this module.
-imageToDiagramEmb :: (Renderable (Dia.DImage Dia.Embedded) b) => DynamicImage -> Diagram b R2
+imageToDiagramEmb :: (Renderable (Dia.DImage (N b) Dia.Embedded) b, V b ~ V2, TypeableFloat (N b)) => DynamicImage -> Diagram b
 imageToDiagramEmb img =
     imageFromDynamicImage img $ \img' ->
         let w = fromIntegral (imageWidth img')
@@ -153,7 +155,7 @@ imageToDiagramEmb img =
 -- directory, and create a diagram which references this 'Image' file.
 -- Unlike imageToDiagramEmb, this Diagram can be rendered by the Cairo
 -- backend.
-imageToDiagramExt :: (Renderable (Dia.DImage Dia.External) b) => DynamicImage -> IO (Diagram b R2)
+imageToDiagramExt :: (Renderable (Dia.DImage (N b) Dia.External) b, V b ~ V2, TypeableFloat (N b)) => DynamicImage -> IO (Diagram b)
 imageToDiagramExt img =
     imageFromDynamicImage img $ \img' -> do
         path <- getTempPath "out.png"
@@ -180,10 +182,10 @@ imageFromDynamicImage (ImageCMYK8  img) f = f img
 imageFromDynamicImage (ImageCMYK16 img) f = f img
 
 -- | Convert a 'Diagram' to a JuicyPixels 'Image'.
-diagramToImage :: Diagram Cairo R2 -> Double -> Double -> IO (Either String DynamicImage)
+diagramToImage :: Diagram Cairo -> Double -> Double -> IO (Either String DynamicImage)
 diagramToImage dia w h = do
     path <- getTempPath "out.png"
-    renderCairo path (Dims w h) dia
+    renderCairo path (dims2D w h) dia
     readPng path
 
 -- | Set PORT environment variable to 3000 if it's unset.  Tells
